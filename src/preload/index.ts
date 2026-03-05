@@ -54,7 +54,9 @@ const api = {
       const handler = (_e: Electron.IpcRendererEvent, d: { id: string; line: string }) => cb(d)
       ipcRenderer.on('server:log', handler)
       return () => ipcRenderer.removeListener('server:log', handler)
-    }
+    },
+    getLogs: (id: string): Promise<string[]> => ipcRenderer.invoke('server:getLogs', id),
+    clearLogs: (id: string): Promise<boolean> => ipcRenderer.invoke('server:clearLogs', id)
   },
 
   // Config / permissions

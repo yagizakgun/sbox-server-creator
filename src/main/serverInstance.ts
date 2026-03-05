@@ -4,9 +4,12 @@ import * as readline from 'readline'
 import { EventEmitter } from 'events'
 import type { ServerConfig, ServerStatus } from './types'
 
+const MAX_LOG_LINES = 5000
+
 class ServerInstanceManager extends EventEmitter {
   private processes = new Map<string, ChildProcess>()
   private statuses = new Map<string, ServerStatus>()
+  private logBuffers = new Map<string, string[]>()
 
   start(config: ServerConfig): void {
     if (this.processes.has(config.id)) {
@@ -21,7 +24,7 @@ class ServerInstanceManager extends EventEmitter {
     const args = buildArgs(config)
 
     this.setStatus(config.id, { id: config.id, state: 'starting' })
-    this.emit('log', config.id, `> ${exe} ${args.join(' ')}`)
+    this.appendLog(config.id, `> ${exe} ${args.join(' ')}`)
 
     const proc = spawn(exe, args, {
       cwd: config.installPath,
@@ -31,7 +34,7 @@ class ServerInstanceManager extends EventEmitter {
     this.processes.set(config.id, proc)
 
     const handleLine = (line: string): void => {
-      this.emit('log', config.id, line)
+      this.appendLog(config.id, line)
     }
 
     const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity })
@@ -96,10 +99,34 @@ class ServerInstanceManager extends EventEmitter {
     this.emit('status', status)
   }
 
+  getLogs(id: string): string[] {
+    return this.logBuffers.get(id) ?? []
+  }
+
+  clearLogs(id: string): void {
+    this.logBuffers.set(id, [])
+  }
+
   stopAll(): void {
     for (const [id] of this.processes) {
       this.stop(id)
     }
+  }
+
+  private appendLog(id: string, line: string): void {
+    const now = new Date()
+    const ts = `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`
+    const stamped = `${ts} ${line}`
+    let buf = this.logBuffers.get(id)
+    if (!buf) {
+      buf = []
+      this.logBuffers.set(id, buf)
+    }
+    buf.push(stamped)
+    if (buf.length > MAX_LOG_LINES) {
+      buf.shift()
+    }
+    this.emit('log', id, stamped)
   }
 }
 

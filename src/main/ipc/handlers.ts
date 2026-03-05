@@ -112,6 +112,15 @@ export function registerServerIpc(): void {
   ipcMain.handle('server:allStatuses', () => {
     return serverManager.getAllStatuses()
   })
+
+  ipcMain.handle('server:getLogs', (_e, id: string) => {
+    return serverManager.getLogs(id)
+  })
+
+  ipcMain.handle('server:clearLogs', (_e, id: string) => {
+    serverManager.clearLogs(id)
+    return true
+  })
 }
 
 export function registerConfigIpc(): void {

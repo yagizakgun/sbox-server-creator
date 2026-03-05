@@ -1,11 +1,32 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, Download } from 'lucide-react'
+import { ArrowLeft, Trash2, Download, ArrowDownToLine, ChevronsDown } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { LogViewer } from '@renderer/components/LogViewer'
 import { StatusBadge } from '@renderer/components/StatusBadge'
+import { cn } from '@renderer/lib/utils'
 import type { ServerConfig, ServerStatus } from '@renderer/types'
+
+type LogLevel = 'all' | 'info' | 'warning' | 'error'
+
+const LEVEL_OPTIONS: { value: LogLevel; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'info', label: 'Info' },
+  { value: 'warning', label: 'Warning' },
+  { value: 'error', label: 'Error' }
+]
+
+function matchesLevel(line: string, level: LogLevel): boolean {
+  if (level === 'all') return true
+  const text = line.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '')
+  const isError = text.startsWith('[Error') || /\berror\b/i.test(text)
+  const isWarning = /\bwarn(ing)?\b/i.test(text)
+  if (level === 'error') return isError
+  if (level === 'warning') return isWarning
+  if (level === 'info') return !isError && !isWarning
+  return true
+}
 
 export default function Logs(): React.JSX.Element {
   const navigate = useNavigate()
@@ -15,6 +36,8 @@ export default function Logs(): React.JSX.Element {
   const [status, setStatus] = useState<ServerStatus>({ id: id!, state: 'stopped' })
   const [lines, setLines] = useState<string[]>([])
   const [filter, setFilter] = useState('')
+  const [level, setLevel] = useState<LogLevel>('all')
+  const [follow, setFollow] = useState(true)
 
   useEffect(() => {
     window.api.server.list().then((list) => {
@@ -22,6 +45,11 @@ export default function Logs(): React.JSX.Element {
       if (found) setConfig(found)
     })
     window.api.server.getStatus(id!).then(setStatus)
+
+    // Hydrate with buffered history — logs survive navigation
+    window.api.server.getLogs(id!).then((history) => {
+      setLines(history)
+    })
 
     const unsubLog = window.api.server.onLog(({ id: serverId, line }) => {
       if (serverId === id) {
@@ -39,7 +67,10 @@ export default function Logs(): React.JSX.Element {
     }
   }, [id])
 
-  const clearLogs = useCallback(() => setLines([]), [])
+  const clearLogs = useCallback(async () => {
+    await window.api.server.clearLogs(id!)
+    setLines([])
+  }, [id])
 
   const exportLogs = useCallback(() => {
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' })
@@ -51,12 +82,13 @@ export default function Logs(): React.JSX.Element {
     URL.revokeObjectURL(url)
   }, [lines, id])
 
-  const filteredLines = filter
-    ? lines.filter((l) => l.toLowerCase().includes(filter.toLowerCase()))
-    : lines
+  const filteredLines = lines.filter((l) => {
+    const textMatch = !filter || l.toLowerCase().includes(filter.toLowerCase())
+    return textMatch && matchesLevel(l, level)
+  })
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col relative">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-3">
         <div className="flex items-center gap-3">
@@ -85,23 +117,71 @@ export default function Logs(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-3 border-b border-border px-6 py-2">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-6 py-2">
         <Input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           placeholder="Filter logs..."
-          className="max-w-sm h-7 text-xs"
+          className="max-w-xs h-7 text-xs"
         />
-        <span className="text-xs text-muted-foreground">
+        <div className="flex items-center rounded-md border border-border overflow-hidden">
+          {LEVEL_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setLevel(opt.value)}
+              className={cn(
+                'px-2.5 py-0.5 text-xs font-medium transition-colors',
+                level === opt.value
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
           {filteredLines.length} / {lines.length} lines
         </span>
+        <button
+          onClick={() => setFollow((f) => !f)}
+          className={cn(
+            'flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors border',
+            follow
+              ? 'border-green-500/30 text-green-400 bg-green-500/10'
+              : 'border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+          )}
+        >
+          <ChevronsDown className="h-3 w-3" />
+          {follow ? 'Following' : 'Paused'}
+        </button>
       </div>
 
       {/* Log output */}
       <div className="flex-1 overflow-hidden p-4">
-        <LogViewer lines={filteredLines} className="h-full" />
+        <LogViewer
+          lines={filteredLines}
+          follow={follow}
+          onFollowChange={setFollow}
+          className="h-full"
+        />
       </div>
+
+      {/* Jump to bottom FAB */}
+      {!follow && (
+        <div className="absolute bottom-8 right-8 z-10">
+          <Button
+            size="sm"
+            variant="secondary"
+            className="shadow-lg gap-1.5"
+            onClick={() => setFollow(true)}
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+            Jump to bottom
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
