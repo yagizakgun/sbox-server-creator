@@ -104,9 +104,13 @@ export function runSteamcmd(
     const errl = readline.createInterface({ input: proc.stderr, crlfDelay: Infinity })
     errl.on('line', (line) => onLine(`[stderr] ${line}`))
 
-    proc.on('close', (code) => {
-      // SteamCMD often exits with non-zero on first run (auto-update), treat as ok
-      if (code === 0 || code === 7) {
+    // Use 'exit' instead of 'close' so the promise resolves as soon as the
+    // main steamcmd.exe process exits, without waiting for inherited stdio
+    // handles held open by child processes spawned during self-update.
+    proc.on('exit', (code) => {
+      // SteamCMD often exits with non-zero on first run (auto-update), treat as ok.
+      // null means the process was killed/restarted by its own bootstrap updater.
+      if (code === 0 || code === 7 || code === null) {
         resolve()
       } else {
         reject(new Error(`SteamCMD exited with code ${code}`))
