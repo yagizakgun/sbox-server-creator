@@ -51,6 +51,12 @@ export async function installSteamcmd(
     onProgress(0.85, line)
   })
 
+  // SteamCMD self-updates on first run and needs a second pass to fully initialize
+  onProgress(0.9, 'Finalizing SteamCMD setup...')
+  await runSteamcmd(dir, ['+quit'], (line) => {
+    onProgress(0.92, line)
+  })
+
   onProgress(1, 'SteamCMD ready.')
 }
 
