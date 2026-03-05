@@ -62,14 +62,18 @@ function downloadFile(
   return new Promise((resolve, reject) => {
     const file = createWriteStream(dest)
     const get = url.startsWith('https') ? https.get : http.get
-    get(url, (res) => {
-      // Follow redirects
+    const req = get(url, (res) => {
+      // Follow redirects — wait for file.close() before reopening the same path on Windows
       if (res.statusCode === 301 || res.statusCode === 302) {
-        file.close()
-        downloadFile(res.headers.location!, dest, onProgress).then(resolve, reject)
+        res.resume()
+        file.close(() => {
+          downloadFile(res.headers.location!, dest, onProgress).then(resolve, reject)
+        })
         return
       }
       if (res.statusCode !== 200) {
+        res.resume()
+        file.close()
         reject(new Error(`HTTP ${res.statusCode}`))
         return
       }
@@ -79,10 +83,20 @@ function downloadFile(
         received += chunk.length
         if (total > 0) onProgress(received / total)
       })
+      // Handle response stream errors — without this the promise hangs forever
+      // if the server drops the connection mid-download
+      res.on('error', (err) => {
+        file.destroy()
+        reject(err)
+      })
       res.pipe(file)
       file.on('finish', () => file.close(() => resolve()))
-      file.on('error', reject)
-    }).on('error', reject)
+      file.on('error', (err) => {
+        res.destroy()
+        reject(err)
+      })
+    })
+    req.on('error', reject)
   })
 }
 

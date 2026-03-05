@@ -68,6 +68,9 @@ export default function Setup(): React.JSX.Element {
     try {
       const result = await window.api.steamcmd.install(steamcmdDir)
       if (result.success) {
+        setLogs([])
+        setProgress(0)
+        setProgressMsg('')
         setStep('sbox-server')
       } else {
         setError(result.error ?? 'Installation failed')
