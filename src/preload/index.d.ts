@@ -46,6 +46,7 @@ interface SboxAPI {
     onLog(cb: (d: { id: string; line: string }) => void): () => void
     getLogs(id: string): Promise<string[]>
     clearLogs(id: string): Promise<boolean>
+    sendCommand(id: string, command: string): Promise<boolean>
   }
   config: {
     readPermissions(serverPath: string): Promise<UserPermission[]>

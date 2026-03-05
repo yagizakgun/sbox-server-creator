@@ -28,7 +28,8 @@ class ServerInstanceManager extends EventEmitter {
 
     const proc = spawn(exe, args, {
       cwd: config.installPath,
-      windowsHide: false
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe']
     })
 
     this.processes.set(config.id, proc)
@@ -105,6 +106,16 @@ class ServerInstanceManager extends EventEmitter {
 
   clearLogs(id: string): void {
     this.logBuffers.set(id, [])
+  }
+
+  sendCommand(id: string, command: string): boolean {
+    const proc = this.processes.get(id)
+    if (!proc || proc.exitCode !== null || !proc.stdin || proc.stdin.destroyed) {
+      return false
+    }
+    this.appendLog(id, `> ${command}`)
+    proc.stdin.write(command + '\n')
+    return true
   }
 
   stopAll(): void {

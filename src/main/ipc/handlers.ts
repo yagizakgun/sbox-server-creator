@@ -121,6 +121,10 @@ export function registerServerIpc(): void {
     serverManager.clearLogs(id)
     return true
   })
+
+  ipcMain.handle('server:sendCommand', (_e, id: string, command: string) => {
+    return serverManager.sendCommand(id, command)
+  })
 }
 
 export function registerConfigIpc(): void {

@@ -56,7 +56,9 @@ const api = {
       return () => ipcRenderer.removeListener('server:log', handler)
     },
     getLogs: (id: string): Promise<string[]> => ipcRenderer.invoke('server:getLogs', id),
-    clearLogs: (id: string): Promise<boolean> => ipcRenderer.invoke('server:clearLogs', id)
+    clearLogs: (id: string): Promise<boolean> => ipcRenderer.invoke('server:clearLogs', id),
+    sendCommand: (id: string, command: string): Promise<boolean> =>
+      ipcRenderer.invoke('server:sendCommand', id, command)
   },
 
   // Config / permissions
