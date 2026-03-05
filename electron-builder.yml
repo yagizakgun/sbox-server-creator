@@ -11,6 +11,7 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - node_modules/node-pty/**
 win:
   executableName: sbox-server-creator
 nsis:
@@ -21,7 +22,7 @@ nsis:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
-npmRebuild: false
+npmRebuild: true
 publish:
   provider: github
   releaseType: release

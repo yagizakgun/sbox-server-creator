@@ -1,23 +1,26 @@
-import { spawn, ChildProcess } from 'child_process'
+import * as pty from 'node-pty'
 import { join } from 'path'
-import * as readline from 'readline'
 import { EventEmitter } from 'events'
 import type { ServerConfig, ServerStatus } from './types'
 
 const MAX_LOG_LINES = 5000
+// Strip ANSI/VT100 escape codes from PTY output (including private mode sequences like ?25h)
+const ANSI_RE = /\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b[()][0-9A-Za-z]|\x1b[=>M]|\x07|\r/g
+
+// Suppress noisy periodic server stats lines
+const SPAM_RE =
+  /^(Physics\s[\d.]+ms|NavMesh\s|Animation\s|Update\s[\d.]+ms|Network\s[\d.]+ms|(?:.+\(\d+\/\d+\)\s\[\d+:\d+:\d+\]))/
 
 class ServerInstanceManager extends EventEmitter {
-  private processes = new Map<string, ChildProcess>()
+  private processes = new Map<string, pty.IPty>()
   private statuses = new Map<string, ServerStatus>()
   private logBuffers = new Map<string, string[]>()
 
   start(config: ServerConfig): void {
-    if (this.processes.has(config.id)) {
-      const proc = this.processes.get(config.id)!
-      if (proc.exitCode === null) {
-        // Already running
-        return
-      }
+    const existing = this.processes.get(config.id)
+    if (existing) {
+      // node-pty doesn't expose exitCode directly, track via onExit
+      return
     }
 
     const exe = join(config.installPath, 'sbox-server.exe')
@@ -26,46 +29,43 @@ class ServerInstanceManager extends EventEmitter {
     this.setStatus(config.id, { id: config.id, state: 'starting' })
     this.appendLog(config.id, `> ${exe} ${args.join(' ')}`)
 
-    const proc = spawn(exe, args, {
+    const proc = pty.spawn(exe, args, {
+      name: 'xterm',
+      cols: 220,
+      rows: 50,
       cwd: config.installPath,
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe']
+      env: process.env as Record<string, string>
     })
 
     this.processes.set(config.id, proc)
 
-    const handleLine = (line: string): void => {
-      this.appendLog(config.id, line)
-    }
-
-    const rl = readline.createInterface({ input: proc.stdout, crlfDelay: Infinity })
-    rl.on('line', (line) => {
-      handleLine(line)
-      if (line.includes('Server startup complete') || line.includes('listening')) {
-        this.setStatus(config.id, { id: config.id, state: 'running', pid: proc.pid })
+    let lineBuffer = ''
+    proc.onData((data) => {
+      const clean = data.replace(ANSI_RE, '')
+      lineBuffer += clean
+      const parts = lineBuffer.split('\n')
+      lineBuffer = parts.pop() ?? ''
+      for (const line of parts) {
+        const trimmed = line.trimEnd()
+        if (!trimmed || SPAM_RE.test(trimmed)) continue
+        this.appendLog(config.id, trimmed)
+        if (trimmed.includes('Server startup complete') || trimmed.includes('listening')) {
+          this.setStatus(config.id, { id: config.id, state: 'running', pid: proc.pid })
+        }
       }
     })
 
-    const errl = readline.createInterface({ input: proc.stderr, crlfDelay: Infinity })
-    errl.on('line', handleLine)
-
-    proc.on('spawn', () => {
-      this.setStatus(config.id, { id: config.id, state: 'starting', pid: proc.pid })
-    })
-
-    proc.on('close', (code) => {
-      handleLine(`[Process exited with code ${code}]`)
-      if (code !== 0 && code !== null) {
-        this.setStatus(config.id, { id: config.id, state: 'error', error: `Exit code ${code}` })
+    proc.onExit(({ exitCode }) => {
+      if (lineBuffer.trim()) {
+        this.appendLog(config.id, lineBuffer.trimEnd())
+        lineBuffer = ''
+      }
+      this.appendLog(config.id, `[Process exited with code ${exitCode}]`)
+      if (exitCode !== 0) {
+        this.setStatus(config.id, { id: config.id, state: 'error', error: `Exit code ${exitCode}` })
       } else {
         this.setStatus(config.id, { id: config.id, state: 'stopped' })
       }
-      this.processes.delete(config.id)
-    })
-
-    proc.on('error', (err) => {
-      handleLine(`[Error: ${err.message}]`)
-      this.setStatus(config.id, { id: config.id, state: 'error', error: err.message })
       this.processes.delete(config.id)
     })
   }
@@ -73,15 +73,15 @@ class ServerInstanceManager extends EventEmitter {
   stop(id: string): void {
     const proc = this.processes.get(id)
     if (proc) {
-      proc.kill('SIGTERM')
+      proc.kill()
     }
   }
 
   restart(config: ServerConfig): void {
     const proc = this.processes.get(config.id)
-    if (proc && proc.exitCode === null) {
-      proc.once('close', () => this.start(config))
-      proc.kill('SIGTERM')
+    if (proc) {
+      proc.onExit(() => this.start(config))
+      proc.kill()
     } else {
       this.start(config)
     }
@@ -110,11 +110,12 @@ class ServerInstanceManager extends EventEmitter {
 
   sendCommand(id: string, command: string): boolean {
     const proc = this.processes.get(id)
-    if (!proc || proc.exitCode !== null || !proc.stdin || proc.stdin.destroyed) {
+    if (!proc) {
+      this.appendLog(id, `[sendCommand failed: server not running]`)
       return false
     }
     this.appendLog(id, `> ${command}`)
-    proc.stdin.write(command + '\n')
+    proc.write(command + '\r')
     return true
   }
 
