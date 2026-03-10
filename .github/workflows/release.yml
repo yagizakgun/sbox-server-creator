@@ -95,6 +95,5 @@ jobs:
             release-assets/release-*/latest*.yaml
             release-assets/release-*/app-update.yml
             release-assets/release-*/*.blockmap
-            release-assets/release-*/builder-debug.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
