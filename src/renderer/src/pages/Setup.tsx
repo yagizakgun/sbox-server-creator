@@ -33,6 +33,7 @@ export default function Setup(): React.JSX.Element {
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
   const [logs, setLogs] = useState<string[]>([])
+  const [followLogs, setFollowLogs] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -57,6 +58,7 @@ export default function Setup(): React.JSX.Element {
     setBusy(true)
     setError('')
     setLogs([])
+    setFollowLogs(true)
     setProgress(0)
 
     const unsub = window.api.steamcmd.onInstallProgress(({ percent, message }) => {
@@ -85,6 +87,7 @@ export default function Setup(): React.JSX.Element {
     setBusy(true)
     setError('')
     setLogs([])
+    setFollowLogs(true)
     setProgress(0)
     setProgressMsg('Starting...')
 
@@ -220,7 +223,12 @@ export default function Setup(): React.JSX.Element {
                     </div>
                     <Progress value={progress} />
                   </div>
-                  <LogViewer lines={logs} className="h-48" />
+                  <LogViewer
+                    lines={logs}
+                    follow={followLogs}
+                    onFollowChange={setFollowLogs}
+                    className="h-48"
+                  />
                 </div>
               )}
 
@@ -281,7 +289,12 @@ export default function Setup(): React.JSX.Element {
                     </div>
                     <Progress value={progress} />
                   </div>
-                  <LogViewer lines={logs} className="h-52" />
+                  <LogViewer
+                    lines={logs}
+                    follow={followLogs}
+                    onFollowChange={setFollowLogs}
+                    className="h-52"
+                  />
                 </div>
               )}
 
