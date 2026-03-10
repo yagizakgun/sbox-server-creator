@@ -1,6 +1,19 @@
-import { autoUpdater } from 'electron-updater'
+import ElectronUpdater from 'electron-updater'
 import { BrowserWindow } from 'electron'
 import log from 'electron-log'
+
+type AutoUpdaterType = (typeof import('electron-updater'))['autoUpdater']
+
+const resolvedAutoUpdater =
+  (ElectronUpdater as unknown as { autoUpdater?: AutoUpdaterType }).autoUpdater ??
+  (ElectronUpdater as unknown as { default?: { autoUpdater?: AutoUpdaterType } }).default
+    ?.autoUpdater
+
+if (!resolvedAutoUpdater) {
+  throw new Error('electron-updater autoUpdater export could not be resolved')
+}
+
+const autoUpdater: AutoUpdaterType = resolvedAutoUpdater
 
 export function setupAutoUpdater(win: BrowserWindow): void {
   autoUpdater.logger = log
