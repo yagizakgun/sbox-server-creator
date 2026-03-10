@@ -17,6 +17,7 @@ import { LogViewer } from '@renderer/components/LogViewer'
 import { cn } from '@renderer/lib/utils'
 
 type Step = 'steamcmd' | 'install-steamcmd' | 'sbox-server' | 'done'
+const DEFAULT_SBOX_APP_ID = '1892930'
 
 const STEPS: { id: Step; label: string; icon: React.ReactNode }[] = [
   { id: 'steamcmd', label: 'SteamCMD', icon: <Terminal className="h-4 w-4" /> },
@@ -30,12 +31,27 @@ export default function Setup(): React.JSX.Element {
   const [step, setStep] = useState<Step>('steamcmd')
   const [steamcmdDir, setSteamcmdDir] = useState('')
   const [serverDir, setServerDir] = useState('')
+  const [appId, setAppId] = useState(DEFAULT_SBOX_APP_ID)
+  const [branch, setBranch] = useState('')
   const [progress, setProgress] = useState(0)
   const [progressMsg, setProgressMsg] = useState('')
   const [logs, setLogs] = useState<string[]>([])
   const [followLogs, setFollowLogs] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  const buildErrorMessage = (result: {
+    error?: string
+    errorCode?: string
+    hint?: string
+    logTail?: string[]
+  }): string => {
+    const message = result.error ?? 'Installation failed'
+    const code = result.errorCode ? `Code: ${result.errorCode}` : ''
+    const hint = result.hint ? `Hint: ${result.hint}` : ''
+    const details = result.logTail?.length ? `Recent log: ${result.logTail[result.logTail.length - 1]}` : ''
+    return [message, code, hint, details].filter(Boolean).join('\n')
+  }
 
   useEffect(() => {
     window.api.steamcmd.getDefaultDir().then((d) => {
@@ -75,7 +91,7 @@ export default function Setup(): React.JSX.Element {
         setProgressMsg('')
         setStep('sbox-server')
       } else {
-        setError(result.error ?? 'Installation failed')
+        setError(buildErrorMessage(result))
       }
     } finally {
       unsub()
@@ -92,23 +108,27 @@ export default function Setup(): React.JSX.Element {
     setProgressMsg('Starting...')
 
     const unsub = window.api.steamcmd.onUpdateProgress(({ percent, message }) => {
-      setProgress(percent > 0 ? Math.round(percent * 100) : progress)
+      setProgress((prev) => (percent > 0 ? Math.round(percent * 100) : prev))
       setProgressMsg(message)
       setLogs((prev) => [...prev, message])
     })
 
     try {
-      const result = await window.api.steamcmd.updateServer(serverDir)
+      const result = await window.api.steamcmd.updateServer({
+        installPath: serverDir,
+        appId: appId.trim() || undefined,
+        branch: branch.trim() || undefined
+      })
       if (result.success) {
         setStep('done')
       } else {
-        setError(result.error ?? 'Installation failed')
+        setError(buildErrorMessage(result))
       }
     } finally {
       unsub()
       setBusy(false)
     }
-  }, [serverDir])
+  }, [appId, branch, serverDir])
 
   const stepIndex = STEPS.findIndex((s) => s.id === step)
 
@@ -233,7 +253,7 @@ export default function Setup(): React.JSX.Element {
               )}
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive whitespace-pre-line">
                   {error}
                   <Button
                     variant="ghost"
@@ -253,7 +273,7 @@ export default function Setup(): React.JSX.Element {
               <div>
                 <h2 className="text-xl font-semibold text-foreground">Install sbox Server</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Downloads the sbox Dedicated Server (App ID 1892930) via SteamCMD. This may take
+                  Downloads the sbox Dedicated Server (App ID {DEFAULT_SBOX_APP_ID}) via SteamCMD. This may take
                   several minutes.
                 </p>
               </div>
@@ -270,6 +290,28 @@ export default function Setup(): React.JSX.Element {
                   <Button variant="outline" size="icon" onClick={browseServerDir}>
                     <FolderOpen className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-border/70 bg-card/30 p-3 space-y-3">
+                <p className="text-xs font-medium text-foreground">Advanced (Anonymous SteamCMD)</p>
+                <div className="space-y-2">
+                  <Label htmlFor="app-id">Steam App ID</Label>
+                  <Input
+                    id="app-id"
+                    value={appId}
+                    onChange={(e) => setAppId(e.target.value)}
+                    placeholder={DEFAULT_SBOX_APP_ID}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="branch">Branch (optional)</Label>
+                  <Input
+                    id="branch"
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    placeholder="public"
+                  />
                 </div>
               </div>
 
@@ -299,7 +341,7 @@ export default function Setup(): React.JSX.Element {
               )}
 
               {error && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive whitespace-pre-line">
                   {error}
                   <Button
                     variant="ghost"

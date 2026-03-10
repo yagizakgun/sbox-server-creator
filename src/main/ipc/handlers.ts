@@ -6,7 +6,8 @@ import {
   isSteamcmdInstalled,
   installSteamcmd,
   installSboxServer,
-  getDefaultSteamcmdDir
+  getDefaultSteamcmdDir,
+  SteamcmdInstallError
 } from '../steamcmd'
 import {
   getServers,
@@ -39,22 +40,52 @@ export function registerSteamcmdIpc(): void {
       setSteamcmdPath(dir)
       return { success: true }
     } catch (err) {
-      return { success: false, error: (err as Error).message }
+      const message = err instanceof Error ? err.message : 'SteamCMD install failed.'
+      if (err instanceof SteamcmdInstallError) {
+        return {
+          success: false,
+          error: message,
+          errorCode: err.code,
+          hint: err.hint,
+          logTail: err.logTail
+        }
+      }
+      return { success: false, error: message }
     }
   })
 
-  ipcMain.handle('steamcmd:updateServer', async (event, installPath: string) => {
-    const steamcmdDir = getSteamcmdPath()
-    try {
-      await installSboxServer(steamcmdDir, installPath, (pct, msg) => {
-        event.sender.send('steamcmd:update:progress', { percent: pct, message: msg })
-      })
-      setSetupComplete(true)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: (err as Error).message }
+  ipcMain.handle(
+    'steamcmd:updateServer',
+    async (
+      event,
+      payload: string | { installPath: string; appId?: string; branch?: string }
+    ) => {
+      const installPath = typeof payload === 'string' ? payload : payload.installPath
+      const appId = typeof payload === 'string' ? undefined : payload.appId
+      const branch = typeof payload === 'string' ? undefined : payload.branch
+
+      const steamcmdDir = getSteamcmdPath()
+      try {
+        await installSboxServer(steamcmdDir, installPath, { appId, branch }, (pct, msg) => {
+          event.sender.send('steamcmd:update:progress', { percent: pct, message: msg })
+        })
+        setSetupComplete(true)
+        return { success: true }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Server install failed.'
+        if (err instanceof SteamcmdInstallError) {
+          return {
+            success: false,
+            error: message,
+            errorCode: err.code,
+            hint: err.hint,
+            logTail: err.logTail
+          }
+        }
+        return { success: false, error: message }
+      }
     }
-  })
+  )
 
   ipcMain.handle('steamcmd:browsePath', async () => {
     const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })

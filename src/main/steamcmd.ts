@@ -9,7 +9,33 @@ import https from 'https'
 import http from 'http'
 
 const STEAMCMD_ZIP_URL = 'https://steamcdn-a.akamaihd.net/client/installer/steamcmd.zip'
-const SBOX_APP_ID = '1892930'
+const DEFAULT_SBOX_APP_ID = '1892930'
+const ERROR_LOG_TAIL_LINES = 30
+
+export type SteamcmdInstallErrorCode =
+  | 'APP_CONFIG_MISSING'
+  | 'APP_NOT_ACCESSIBLE_ANON'
+  | 'AUTH_REQUIRED'
+  | 'STEAMCMD_PROCESS_ERROR'
+
+export class SteamcmdInstallError extends Error {
+  code: SteamcmdInstallErrorCode
+  hint: string
+  logTail: string[]
+
+  constructor(
+    message: string,
+    code: SteamcmdInstallErrorCode,
+    hint: string,
+    logTail: string[] = []
+  ) {
+    super(message)
+    this.name = 'SteamcmdInstallError'
+    this.code = code
+    this.hint = hint
+    this.logTail = logTail
+  }
+}
 
 export function getDefaultSteamcmdDir(): string {
   return join(app.getPath('userData'), 'steamcmd')
@@ -140,37 +166,123 @@ export function runSteamcmd(
   })
 }
 
+function lastLines(lines: string[], count = ERROR_LOG_TAIL_LINES): string[] {
+  return lines.slice(Math.max(lines.length - count, 0))
+}
+
+function classifySteamcmdFailure(lines: string[], fallbackMessage: string): SteamcmdInstallError {
+  const normalized = lines.join('\n').toLowerCase()
+  const tail = lastLines(lines)
+
+  if (normalized.includes('missing configuration')) {
+    return new SteamcmdInstallError(
+      'Steam app configuration is missing for this target.',
+      'APP_CONFIG_MISSING',
+      'Anonymous access can fail when the selected app id or branch is unavailable. Verify App ID and branch settings.',
+      tail
+    )
+  }
+
+  if (normalized.includes('no subscription') || normalized.includes('not subscribed')) {
+    return new SteamcmdInstallError(
+      'Anonymous account is not subscribed to this app.',
+      'APP_NOT_ACCESSIBLE_ANON',
+      'This app cannot be fetched anonymously right now. Confirm the app is public for anonymous SteamCMD access.',
+      tail
+    )
+  }
+
+  if (normalized.includes('invalid password') || normalized.includes('steam guard')) {
+    return new SteamcmdInstallError(
+      'SteamCMD requested account authentication.',
+      'AUTH_REQUIRED',
+      'The current setup supports anonymous login only. Use an app/branch that supports anonymous access.',
+      tail
+    )
+  }
+
+  return new SteamcmdInstallError(
+    fallbackMessage,
+    'STEAMCMD_PROCESS_ERROR',
+    'Review recent SteamCMD logs for details and retry the install.',
+    tail
+  )
+}
+
+async function checkAnonymousAppAccess(
+  steamcmdDir: string,
+  appId: string,
+  onProgress: (p: number, msg: string) => void
+): Promise<void> {
+  const probeLines: string[] = []
+  onProgress(0.05, `Preflight: checking anonymous access for app ${appId}...`)
+
+  try {
+    await runSteamcmd(
+      steamcmdDir,
+      ['+login', 'anonymous', '+app_info_update', '1', '+app_info_print', appId, '+quit'],
+      (line) => {
+        probeLines.push(line)
+        onProgress(0.08, line)
+      }
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'SteamCMD preflight failed.'
+    throw classifySteamcmdFailure(probeLines, message)
+  }
+
+  const probeText = probeLines.join('\n').toLowerCase()
+  if (probeText.includes('missing configuration') || probeText.includes('no subscription')) {
+    throw classifySteamcmdFailure(probeLines, 'SteamCMD preflight failed for anonymous access.')
+  }
+}
+
 /**
  * Installs or updates the sbox dedicated server.
  */
 export async function installSboxServer(
   steamcmdDir: string,
   installPath: string,
+  target: { appId?: string; branch?: string } | undefined,
   onProgress: (p: number, msg: string) => void
 ): Promise<void> {
+  const appId = (target?.appId || DEFAULT_SBOX_APP_ID).trim()
+  const branch = (target?.branch || '').trim()
+
   if (!existsSync(installPath)) {
     mkdirSync(installPath, { recursive: true })
   }
 
-  const args = [
+  await checkAnonymousAppAccess(steamcmdDir, appId, onProgress)
+
+  const args: string[] = [
     '+force_install_dir',
     installPath,
     '+login',
     'anonymous',
     '+app_update',
-    SBOX_APP_ID,
-    'validate',
-    '+quit'
+    appId
   ]
 
+  if (branch) {
+    args.push('-beta', branch)
+  }
+
+  args.push('validate', '+quit')
+
   const lines: string[] = []
-  await runSteamcmd(steamcmdDir, args, (line) => {
-    lines.push(line)
-    // Try to parse "Update state ... downloading" lines for progress
-    const match = line.match(/(\d+\.\d+)%/)
-    const pct = match ? parseFloat(match[1]) / 100 : -1
-    onProgress(pct >= 0 ? pct : 0.5, line)
-  })
+  try {
+    await runSteamcmd(steamcmdDir, args, (line) => {
+      lines.push(line)
+      // Try to parse "Update state ... downloading" lines for progress
+      const match = line.match(/(\d+\.\d+)%/)
+      const pct = match ? parseFloat(match[1]) / 100 : -1
+      onProgress(pct >= 0 ? pct : 0.5, line)
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'SteamCMD failed during server install.'
+    throw classifySteamcmdFailure(lines, message)
+  }
 
   onProgress(1, 'sbox server installation complete.')
 }

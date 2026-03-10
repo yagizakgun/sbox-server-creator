@@ -1,6 +1,26 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
+type SteamcmdErrorCode =
+  | 'APP_CONFIG_MISSING'
+  | 'APP_NOT_ACCESSIBLE_ANON'
+  | 'AUTH_REQUIRED'
+  | 'STEAMCMD_PROCESS_ERROR'
+
+type SteamcmdActionResult = {
+  success: boolean
+  error?: string
+  errorCode?: SteamcmdErrorCode
+  hint?: string
+  logTail?: string[]
+}
+
+type UpdateServerRequest = {
+  installPath: string
+  appId?: string
+  branch?: string
+}
+
 // Typed API exposed to renderer via contextBridge
 const api = {
   // SteamCMD
@@ -10,12 +30,11 @@ const api = {
     checkInstalled: (dir: string): Promise<boolean> =>
       ipcRenderer.invoke('steamcmd:checkInstalled', dir),
     isSetupComplete: (): Promise<boolean> => ipcRenderer.invoke('steamcmd:isSetupComplete'),
-    install: (dir: string): Promise<{ success: boolean; error?: string }> =>
+    install: (dir: string): Promise<SteamcmdActionResult> =>
       ipcRenderer.invoke('steamcmd:install', dir),
     updateServer: (
-      installPath: string
-    ): Promise<{ success: boolean; error?: string }> =>
-      ipcRenderer.invoke('steamcmd:updateServer', installPath),
+      payload: string | UpdateServerRequest
+    ): Promise<SteamcmdActionResult> => ipcRenderer.invoke('steamcmd:updateServer', payload),
     browsePath: (): Promise<string | null> => ipcRenderer.invoke('steamcmd:browsePath'),
     onInstallProgress: (cb: (data: { percent: number; message: string }) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, d: { percent: number; message: string }) =>

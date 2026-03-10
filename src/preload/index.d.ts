@@ -29,6 +29,25 @@ export interface ServerStats {
 }
 
 type ProgressData = { percent: number; message: string }
+type SteamcmdErrorCode =
+  | 'APP_CONFIG_MISSING'
+  | 'APP_NOT_ACCESSIBLE_ANON'
+  | 'AUTH_REQUIRED'
+  | 'STEAMCMD_PROCESS_ERROR'
+
+interface SteamcmdActionResult {
+  success: boolean
+  error?: string
+  errorCode?: SteamcmdErrorCode
+  hint?: string
+  logTail?: string[]
+}
+
+interface UpdateServerRequest {
+  installPath: string
+  appId?: string
+  branch?: string
+}
 
 interface SboxAPI {
   steamcmd: {
@@ -36,8 +55,8 @@ interface SboxAPI {
     getSavedPath(): Promise<string>
     checkInstalled(dir: string): Promise<boolean>
     isSetupComplete(): Promise<boolean>
-    install(dir: string): Promise<{ success: boolean; error?: string }>
-    updateServer(installPath: string): Promise<{ success: boolean; error?: string }>
+    install(dir: string): Promise<SteamcmdActionResult>
+    updateServer(payload: string | UpdateServerRequest): Promise<SteamcmdActionResult>
     browsePath(): Promise<string | null>
     onInstallProgress(cb: (d: ProgressData) => void): () => void
     onUpdateProgress(cb: (d: ProgressData) => void): () => void
