@@ -1,5 +1,8 @@
-import Store from 'electron-store'
+import ElectronStore from 'electron-store'
 import type { ServerConfig } from './types'
+
+const Store =
+  (ElectronStore as unknown as { default?: typeof ElectronStore }).default ?? ElectronStore
 
 interface StoreSchema {
   servers: ServerConfig[]

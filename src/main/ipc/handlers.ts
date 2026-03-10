@@ -1,5 +1,7 @@
 import { ipcMain, dialog } from 'electron'
 import { randomUUID } from 'crypto'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import {
   isSteamcmdInstalled,
   installSteamcmd,
@@ -132,9 +134,6 @@ export function registerServerIpc(): void {
 }
 
 export function registerConfigIpc(): void {
-  const { readFileSync, writeFileSync, existsSync } = require('fs')
-  const { join } = require('path')
-
   ipcMain.handle('config:readPermissions', (_e, serverPath: string) => {
     const filePath = join(serverPath, 'users', 'config.json')
     if (!existsSync(filePath)) {
@@ -148,7 +147,6 @@ export function registerConfigIpc(): void {
   })
 
   ipcMain.handle('config:writePermissions', (_e, serverPath: string, data: unknown) => {
-    const { mkdirSync } = require('fs')
     const usersDir = join(serverPath, 'users')
     if (!existsSync(usersDir)) {
       mkdirSync(usersDir, { recursive: true })

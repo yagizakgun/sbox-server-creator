@@ -2,7 +2,7 @@
   "name": "sbox-server-creator",
   "version": "0.1.0",
   "description": "sbox Dedicated Server installer and manager",
-  "main": "./out/main/index.js",
+  "main": "./out/main/index.mjs",
   "author": "",
   "homepage": "https://github.com/sbox-server-creator",
   "scripts": {

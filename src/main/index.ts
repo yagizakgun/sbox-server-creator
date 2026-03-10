@@ -1,10 +1,14 @@
 import { app, shell, BrowserWindow } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerSteamcmdIpc, registerServerIpc, registerConfigIpc } from './ipc/handlers'
 import { serverManager } from './serverInstance'
 import { setupAutoUpdater, checkForUpdates } from './autoUpdater'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 function createWindow(): void {
   // Create the browser window.
