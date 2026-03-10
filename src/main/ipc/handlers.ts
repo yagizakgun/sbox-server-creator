@@ -125,6 +125,10 @@ export function registerServerIpc(): void {
   ipcMain.handle('server:sendCommand', (_e, id: string, command: string) => {
     return serverManager.sendCommand(id, command)
   })
+
+  ipcMain.handle('server:getStats', (_e, id: string) => {
+    return serverManager.getStats(id)
+  })
 }
 
 export function registerConfigIpc(): void {

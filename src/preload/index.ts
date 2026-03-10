@@ -58,7 +58,14 @@ const api = {
     getLogs: (id: string): Promise<string[]> => ipcRenderer.invoke('server:getLogs', id),
     clearLogs: (id: string): Promise<boolean> => ipcRenderer.invoke('server:clearLogs', id),
     sendCommand: (id: string, command: string): Promise<boolean> =>
-      ipcRenderer.invoke('server:sendCommand', id, command)
+      ipcRenderer.invoke('server:sendCommand', id, command),
+    getStats: (id: string): Promise<import('../main/types').ServerStats | null> =>
+      ipcRenderer.invoke('server:getStats', id),
+    onStats: (cb: (stats: import('../main/types').ServerStats) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, s: import('../main/types').ServerStats) => cb(s)
+      ipcRenderer.on('server:stats', handler)
+      return () => ipcRenderer.removeListener('server:stats', handler)
+    }
   },
 
   // Config / permissions

@@ -24,6 +24,16 @@ export interface ProgressEvent {
   message: string
 }
 
+export interface ServerStats {
+  id: string
+  physics?: string
+  navmesh?: string
+  animation?: string
+  update?: string
+  network?: string
+  serverInfo?: string
+}
+
 export interface UserPermission {
   SteamId: string
   Name: string

@@ -47,6 +47,12 @@ function createWindow(): void {
     }
   })
 
+  serverManager.on('stats', (stats) => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('server:stats', stats)
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

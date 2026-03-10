@@ -1,20 +1,40 @@
 import * as pty from 'node-pty'
 import { join } from 'path'
 import { EventEmitter } from 'events'
-import type { ServerConfig, ServerStatus } from './types'
+import type { ServerConfig, ServerStatus, ServerStats } from './types'
 
 const MAX_LOG_LINES = 5000
 // Strip ANSI/VT100 escape codes from PTY output (including private mode sequences like ?25h)
 const ANSI_RE = /\x1b\[[\x20-\x3f]*[\x40-\x7e]|\x1b[()][0-9A-Za-z]|\x1b[=>M]|\x07|\r/g
 
-// Suppress noisy periodic server stats lines
-const SPAM_RE =
-  /^(Physics\s[\d.]+ms|NavMesh\s|Animation\s|Update\s[\d.]+ms|Network\s[\d.]+ms|(?:.+\(\d+\/\d+\)\s\[\d+:\d+:\d+\]))/
+// Matches periodic server stats lines — these update the stats panel instead of the log
+const STATS_PHYSICS_RE = /^Physics\s+([\d.]+ms).*NavMesh\s+([\d.]+ms).*Animation\s+([\d.]+ms)/
+const STATS_UPDATE_RE = /^Update\s+([\d.]+ms)/
+const STATS_NETWORK_RE = /^Network\s+([\d.]+ms)/
+const STATS_SERVER_RE = /^(.+?)\s+\((\d+\/\d+)\)\s+(\[\d+:\d+:\d+\])/
 
 class ServerInstanceManager extends EventEmitter {
   private processes = new Map<string, pty.IPty>()
   private statuses = new Map<string, ServerStatus>()
   private logBuffers = new Map<string, string[]>()
+  private statsBuffers = new Map<string, ServerStats>()
+
+  getStats(id: string): ServerStats | null {
+    return this.statsBuffers.get(id) ?? null
+  }
+
+  private updateStats(id: string, patch: Partial<Omit<ServerStats, 'id'>>): void {
+    const current = this.statsBuffers.get(id) ?? { id }
+    const updated = { ...current, ...patch }
+    this.statsBuffers.set(id, updated)
+    this.emit('stats', updated)
+    // If stats are flowing, the server is clearly running
+    const status = this.statuses.get(id)
+    if (status?.state === 'starting') {
+      const proc = this.processes.get(id)
+      this.setStatus(id, { id, state: 'running', pid: proc?.pid })
+    }
+  }
 
   start(config: ServerConfig): void {
     const existing = this.processes.get(config.id)
@@ -47,7 +67,27 @@ class ServerInstanceManager extends EventEmitter {
       lineBuffer = parts.pop() ?? ''
       for (const line of parts) {
         const trimmed = line.trimEnd()
-        if (!trimmed || SPAM_RE.test(trimmed)) continue
+        if (!trimmed) continue
+
+        // Parse stats lines — update panel, don't log
+        let mPhysics: RegExpMatchArray | null
+        let mUpdate: RegExpMatchArray | null
+        let mNetwork: RegExpMatchArray | null
+        let mServer: RegExpMatchArray | null
+        if ((mPhysics = trimmed.match(STATS_PHYSICS_RE))) {
+          this.updateStats(config.id, { physics: mPhysics[1], navmesh: mPhysics[2], animation: mPhysics[3] })
+          continue
+        } else if ((mUpdate = trimmed.match(STATS_UPDATE_RE))) {
+          this.updateStats(config.id, { update: mUpdate[1] })
+          continue
+        } else if ((mNetwork = trimmed.match(STATS_NETWORK_RE))) {
+          this.updateStats(config.id, { network: mNetwork[1] })
+          continue
+        } else if ((mServer = trimmed.match(STATS_SERVER_RE))) {
+          this.updateStats(config.id, { serverInfo: `${mServer[1]} (${mServer[2]}) ${mServer[3]}` })
+          continue
+        }
+
         this.appendLog(config.id, trimmed)
         if (trimmed.includes('Server startup complete') || trimmed.includes('listening')) {
           this.setStatus(config.id, { id: config.id, state: 'running', pid: proc.pid })

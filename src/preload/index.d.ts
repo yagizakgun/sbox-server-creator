@@ -18,6 +18,16 @@ export interface ServerStatus {
   error?: string
 }
 
+export interface ServerStats {
+  id: string
+  physics?: string
+  navmesh?: string
+  animation?: string
+  update?: string
+  network?: string
+  serverInfo?: string
+}
+
 type ProgressData = { percent: number; message: string }
 
 interface SboxAPI {
@@ -47,6 +57,8 @@ interface SboxAPI {
     getLogs(id: string): Promise<string[]>
     clearLogs(id: string): Promise<boolean>
     sendCommand(id: string, command: string): Promise<boolean>
+    getStats(id: string): Promise<ServerStats | null>
+    onStats(cb: (s: ServerStats) => void): () => void
   }
   config: {
     readPermissions(serverPath: string): Promise<UserPermission[]>

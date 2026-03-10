@@ -20,3 +20,13 @@ export interface ProgressEvent {
   percent: number
   message: string
 }
+
+export interface ServerStats {
+  id: string
+  physics?: string
+  navmesh?: string
+  animation?: string
+  update?: string
+  network?: string
+  serverInfo?: string
+}

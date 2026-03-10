@@ -6,7 +6,7 @@ import { Input } from '@renderer/components/ui/input'
 import { LogViewer } from '@renderer/components/LogViewer'
 import { StatusBadge } from '@renderer/components/StatusBadge'
 import { cn } from '@renderer/lib/utils'
-import type { ServerConfig, ServerStatus } from '@renderer/types'
+import type { ServerConfig, ServerStatus, ServerStats } from '@renderer/types'
 
 type LogLevel = 'all' | 'info' | 'warning' | 'error'
 
@@ -35,6 +35,7 @@ export default function Logs(): React.JSX.Element {
   const [config, setConfig] = useState<ServerConfig | null>(null)
   const [status, setStatus] = useState<ServerStatus>({ id: id!, state: 'stopped' })
   const [lines, setLines] = useState<string[]>([])
+  const [stats, setStats] = useState<ServerStats | null>(null)
   const [filter, setFilter] = useState('')
   const [level, setLevel] = useState<LogLevel>('all')
   const [follow, setFollow] = useState(true)
@@ -55,10 +56,18 @@ export default function Logs(): React.JSX.Element {
       setLines(history)
     })
 
+    window.api.server.getStats(id!).then((s) => {
+      if (s) setStats(s)
+    })
+
     const unsubLog = window.api.server.onLog(({ id: serverId, line }) => {
       if (serverId === id) {
         setLines((prev) => [...prev, line])
       }
+    })
+
+    const unsubStats = window.api.server.onStats((s) => {
+      if (s.id === id) setStats(s)
     })
 
     const unsubStatus = window.api.server.onStatusUpdate((s) => {
@@ -67,6 +76,7 @@ export default function Logs(): React.JSX.Element {
 
     return () => {
       unsubLog()
+      unsubStats()
       unsubStatus()
     }
   }, [id])
@@ -151,6 +161,20 @@ export default function Logs(): React.JSX.Element {
           </Button>
         </div>
       </div>
+
+      {/* Stats bar */}
+      {stats && status.state === 'running' && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-6 py-1.5 bg-black/20 font-mono text-[11px] text-muted-foreground">
+          {stats.serverInfo && (
+            <span className="text-green-400 font-semibold">{stats.serverInfo}</span>
+          )}
+          {stats.physics && <span><span className="text-zinc-500">Physics </span>{stats.physics}</span>}
+          {stats.navmesh && <span><span className="text-zinc-500">NavMesh </span>{stats.navmesh}</span>}
+          {stats.animation && <span><span className="text-zinc-500">Anim </span>{stats.animation}</span>}
+          {stats.update && <span><span className="text-zinc-500">Update </span>{stats.update}</span>}
+          {stats.network && <span><span className="text-zinc-500">Network </span>{stats.network}</span>}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-6 py-2">
