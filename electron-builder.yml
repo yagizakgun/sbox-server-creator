@@ -22,6 +22,10 @@ nsis:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   notarize: false
+linux:
+  category: Utility
+  target:
+    - AppImage
 npmRebuild: true
 publish:
   provider: github
