@@ -53,15 +53,17 @@ jobs:
           name: release-${{ matrix.platform }}
           if-no-files-found: error
           path: |
-            dist/**/*.exe
-            dist/**/*.dmg
-            dist/**/*.zip
-            dist/**/*.AppImage
-            dist/**/*.deb
-            dist/**/*.rpm
-            dist/**/*.yml
-            dist/**/*.yaml
-            dist/**/*.blockmap
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/latest*.yml
+            dist/latest*.yaml
+            dist/app-update.yml
+            dist/*.blockmap
+            dist/builder-debug.yml
 
   release:
     name: Publish GitHub Release
@@ -75,7 +77,7 @@ jobs:
         with:
           path: release-assets
           pattern: release-*
-          merge-multiple: true
+          merge-multiple: false
 
       - name: Create/Update release and upload assets
         uses: softprops/action-gh-release@v2
@@ -83,6 +85,16 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            release-assets/**
+            release-assets/release-*/*.exe
+            release-assets/release-*/*.dmg
+            release-assets/release-*/*.zip
+            release-assets/release-*/*.AppImage
+            release-assets/release-*/*.deb
+            release-assets/release-*/*.rpm
+            release-assets/release-*/latest*.yml
+            release-assets/release-*/latest*.yaml
+            release-assets/release-*/app-update.yml
+            release-assets/release-*/*.blockmap
+            release-assets/release-*/builder-debug.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
