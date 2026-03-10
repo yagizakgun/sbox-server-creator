@@ -4,7 +4,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Typed API exposed to renderer via contextBridge
 const api = {
   // SteamCMD
-  steamcmd: {
+  steamcmd: { 
     getDefaultDir: (): Promise<string> => ipcRenderer.invoke('steamcmd:getDefaultDir'),
     getSavedPath: (): Promise<string> => ipcRenderer.invoke('steamcmd:getSavedPath'),
     checkInstalled: (dir: string): Promise<boolean> =>
