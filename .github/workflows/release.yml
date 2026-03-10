@@ -87,13 +87,6 @@ jobs:
           files: |
             release-assets/release-*/*.exe
             release-assets/release-*/*.dmg
-            release-assets/release-*/*.zip
             release-assets/release-*/*.AppImage
-            release-assets/release-*/*.deb
-            release-assets/release-*/*.rpm
-            release-assets/release-*/latest*.yml
-            release-assets/release-*/latest*.yaml
-            release-assets/release-*/app-update.yml
-            release-assets/release-*/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
